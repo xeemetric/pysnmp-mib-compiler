@@ -28,7 +28,7 @@ class MIBCompiler(object):
     def __init__(self, mibs_root):
         self.mibs_root = mibs_root
         self.mibs = {}
-        self.staging_dir = tempfile.mkdtemp()
+        self.tmp_dir = tempfile.mkdtemp()
         self.smi_conf = None
 
     def process(self, mib):
@@ -63,8 +63,7 @@ class MIBCompiler(object):
 
     def check_pysnmp(self):
         mibBuilder = builder.MibBuilder()
-        mib_path = ['{}/pysnmp/{}'.format(self.mibs_root, mib_type) for mib_type in ('core', 'current')]
-        mib_path.append(self.staging_dir)
+        mib_path = ['{}/pysnmp/{}'.format(self.mibs_root, mib_type) for mib_type in ('core', 'current', 'staging')]
         mibBuilder.setMibPath(*tuple(mib_path))
         try:
             mibBuilder.loadModules()
@@ -114,16 +113,15 @@ class MIBCompiler(object):
             smi_conf=self.smi_conf.name, severity=severity, mib=self.mibs[mib]['path']))
         if returncode:
             raise CompileError('{mib}: mib syntax invalid'.format(mib=mib))
-        re_dep = re.compile("^.*? failed to locate MIB module `(.*?)'")
-        # re_not_found = re.compile(".*? cannot locate module `(.*?)'")
         for line in stderr.split('\n'):
-            re_dep_match = re_dep.match(line)
+            re_dep_match = re.match("^.*? failed to locate MIB module `(.*?)'", line)
             if re_dep_match:
-                raise CompileError('{mib}: mib syntax invalid, m'.format(mib=mib))
+                raise CompileError('{mib}: failed to locate MIB {missing_mib}'.format(
+                    mib=mib, missing_mib=re_dep_match.group(1)))
 
     def convert_mib_to_smiv2(self, mib):
         log.info('{mib}: converting to SMIv2 format'.format(mib=mib))
-        filename = os.path.join(self.staging_dir, '{}.smiv2'.format(mib))
+        filename = os.path.join(self.tmp_dir, '{}.smiv2'.format(mib))
         returncode, stdout, stderr = exec_cmd(
             "smidump -c {smi_conf} -l 3 -k -s -f smiv2 -o {filename} {mib}".format(
                 smi_conf=self.smi_conf.name, filename=filename, mib=self.mibs[mib]['path']))
@@ -133,7 +131,7 @@ class MIBCompiler(object):
 
     def convert_mib_to_python(self, mib):
         log.info('{mib}: converting to python format'.format(mib=mib))
-        filename = os.path.join(self.staging_dir, '{}.python'.format(mib))
+        filename = os.path.join(self.tmp_dir, '{}.python'.format(mib))
         returncode, stdout, stderr = exec_cmd(
             "smidump -c {smi_conf} -l 3 -k -s -f python -o {filename} {mib}".format(
                 smi_conf=self.smi_conf.name, filename=filename, mib=self.mibs[mib]['path']))
@@ -141,9 +139,11 @@ class MIBCompiler(object):
             raise CompileError('{mib}: convert to python failed'.format(mib=mib))
 
     def convert_mib_to_pysnmp(self, mib):
+        staging_dir = os.path.join(self.mibs_root, 'pysnmp', 'staging')
+        os.path.isdir(staging_dir) or os.makedirs(staging_dir)
         log.info('{mib}: converting to PySNMP format'.format(mib=mib))
-        fn_in = os.path.join(self.staging_dir, '{}.python'.format(mib))
-        fn_out = os.path.join(self.staging_dir, '{}.py'.format(mib))
+        fn_in = os.path.join(self.tmp_dir, '{}.python'.format(mib))
+        fn_out = os.path.join(self.mibs_root, 'pysnmp', 'staging', '{}.py'.format(mib))
         returncode, stdout, stderr = exec_cmd("cat {} | libsmi2pysnmp > {}".format(
             fn_in, fn_out))
         if returncode:
@@ -168,7 +168,7 @@ class MIBCompiler(object):
         return modules.keys()
 
     def commit(self):
-        for root, dirs, files in os.walk(self.staging_dir):
+        for root, dirs, files in os.walk(os.path.join(self.mibs_root, 'pysnmp', 'staging')):
             for filename in files:
                 if not filename.endswith('.py'):
                     continue
@@ -186,7 +186,7 @@ class MIBCompiler(object):
                         continue
                 log.info('Exporting MIB file={}, size={}'.format(filename, size_new))
                 shutil.move(fn_new, fn_old)
-        os.unlink(self.smi_conf.name)
+        self.smi_conf and os.unlink(self.smi_conf.name)
 
 
 def exec_cmd(cmd):
@@ -203,11 +203,16 @@ def main():
 
     parser = argparse.ArgumentParser()
     parser.add_argument("mib", help="MIB file to compile")
+    parser.add_argument("--revalidate", help="validate and commit changes", action="store_true")
     parser.add_argument("--mibs_root", help="MIBs location")
     args = parser.parse_args()
 
     mib_compiler = MIBCompiler(args.mibs_root)
-    mib_compiler.process(args.mib)
+    if args.revalidate:
+        mib_compiler.check_pysnmp()
+        mib_compiler.commit()
+    else:
+        mib_compiler.process(args.mib)
 
 
 if __name__ == "__main__":

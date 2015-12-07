@@ -15,15 +15,25 @@ MIB Compiler for PySNMP.
     8. Moves all staging mibs to mibs/pysnmp/current
 
 
-## with Docker
+## Installation
 
-    $ git clone https://github.com/xeemetric/mibs.git
-    $ docker run -v mibs:/mibs xeemetric/pysnmp-mib-compiler CISCO-SMI
+    $ git clone https://github.com/xeemetric/mibs
+    $ git clone https://github.com/xeemetric/pysnmp-mib-compiler
+    $ sudo apt-get update && apt-get install smitools
+    $ sudo pip install -r pysnmp-mib-compiler/requirements.txt && pip install pysnmp-mib-compiler
 
 
-## Known issues and workarounds:
+## How to use?
 
-    1. Too long import list (>255) --> can be fixed in compiled code manually
+    $ mib_compiler --mibs_root mibs CISCO-SMI
+
+
+## Troubleshooting
+
+    - MIB compilation failing
+        If the dependency MIB is missing, download it and place into mibs/asn1 directory
+    - PySNMP MIB is created in mibs/pysnmp/staging, but validation fails, e.g. (too long import list >255)
+        Fix it manually in staging directory and re-run mib_compiler with --revalidate argument
 
 
 ## Author
