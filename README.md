@@ -1,6 +1,11 @@
+# Obsolete!
+
+It is recommended to use a pure Python and feature rich [PySMI mibdump](http://pysmi.sourceforge.net/user-perspective.html) tool written by Ilya Etingof.
+
+
 # pysnmp-mib-compiler
 
-MIB Compiler for PySNMP.
+An easy to use MIB Compiler for PySNMP based on [libsmi](https://www.ibr.cs.tu-bs.de/projects/libsmi/).
 
 
 ## What it does?
