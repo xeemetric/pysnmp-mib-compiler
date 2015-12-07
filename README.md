@@ -17,8 +17,8 @@ MIB Compiler for PySNMP.
 
 ## Installation
 
-    $ git clone https://github.com/xeemetric/mibs
-    $ git clone https://github.com/xeemetric/pysnmp-mib-compiler
+    $ git clone https://github.com/xeemetric/mibs.git
+    $ git clone https://github.com/xeemetric/pysnmp-mib-compiler.git
     $ sudo apt-get update && apt-get install smitools
     $ sudo pip install -r pysnmp-mib-compiler/requirements.txt && pip install pysnmp-mib-compiler
 
