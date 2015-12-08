@@ -1,3 +1,4 @@
+recursive-include pysnmp_mib_compiler/templates *
 include LICENSE
 include README.md
 include requirements.txt
