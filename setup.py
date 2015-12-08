@@ -2,7 +2,7 @@ from setuptools import setup
 
 setup(
     name='pysnmp-mib-compiler',
-    description='MIB Compiler for PySNMP',
+    description='An alternative MIB Compiler for PySNMP',
     version='0.1.0',
     author='Dmitry Korobitsin',
     author_email='korobicin@gmail.com',

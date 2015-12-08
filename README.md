@@ -1,11 +1,16 @@
-# Obsolete!
-
-It is recommended to use a pure Python and feature rich [PySMI mibdump](http://pysmi.sourceforge.net/user-perspective.html) tool written by Ilya Etingof.
-
-
 # pysnmp-mib-compiler
 
-An easy to use MIB Compiler for PySNMP based on [libsmi](https://www.ibr.cs.tu-bs.de/projects/libsmi/).
+An alternative MIB Compiler for PySNMP.
+
+
+## Why yet another one?
+
+In most cases it is recommended to use a pure Python and feature rich [PySMI mibdump](http://pysmi.sourceforge.net/user-perspective.html)
+utility written by Ilya Etingof.
+
+However in some cases given the complexity of the MIB files PySMI might fail
+while the MIB can still be parsed by the standard [libsmi](https://www.ibr.cs.tu-bs.de/projects/libsmi/) utility.
+This is why pysnmp-mib-compiler relying on libsmi for parsing of MIB modules can be more useful.
 
 
 ## What it does?
@@ -17,12 +22,11 @@ An easy to use MIB Compiler for PySNMP based on [libsmi](https://www.ibr.cs.tu-b
     5. Converts to PySNMP format and places it to staging folder
     6. Compiles prerequisites if not yet compiled
     7. Checks PySNMP consistency state after compilation
-    8. Moves all staging mibs to mibs/pysnmp/current
+    8. Moves all staging mibs to destination directory
 
 
 ## Installation
 
-    $ git clone https://github.com/xeemetric/mibs.git
     $ git clone https://github.com/xeemetric/pysnmp-mib-compiler.git
     $ sudo apt-get update && apt-get install smitools
     $ sudo pip install -r pysnmp-mib-compiler/requirements.txt && pip install pysnmp-mib-compiler
@@ -30,7 +34,8 @@ An easy to use MIB Compiler for PySNMP based on [libsmi](https://www.ibr.cs.tu-b
 
 ## How to use?
 
-    $ mib_compiler --mibs_root mibs CISCO-SMI
+
+    $ mib_compiler --mib-source <path to asn1 mibs> <MIB module name>
 
 
 ## Troubleshooting

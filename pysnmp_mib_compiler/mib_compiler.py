@@ -25,15 +25,17 @@ class CompileError(Exception):
 
 
 class MIBCompiler(object):
-    def __init__(self, mibs_root):
-        self.mibs_root = mibs_root
+    def __init__(self, mib_source, destination_directory, staging_directory):
+        self.mib_source = mib_source
+        self.destination_directory = destination_directory
+        self.staging_directory = staging_directory
         self.mibs = {}
         self.tmp_dir = tempfile.mkdtemp()
         self.smi_conf = None
 
     def process(self, mib):
         self.generate_smi_conf()
-        self.load_core_mibs()
+        self.load_existing_mibs()
         self.mibs[mib] = {'allow_overwrite': True}
         self.check_pysnmp()
         self.compile(mib)
@@ -43,7 +45,7 @@ class MIBCompiler(object):
     def generate_smi_conf(self):
         self.smi_conf = tempfile.NamedTemporaryFile(suffix='.conf', delete=False)
         mib_paths = []
-        for dirpaths, dirnames, filenames in os.walk(os.path.join(self.mibs_root, 'asn1')):
+        for dirpaths, dirnames, filenames in os.walk(self.mib_source):
             if not dirnames:
                 mib_paths.append(dirpaths)
 
@@ -53,18 +55,23 @@ class MIBCompiler(object):
                 dst.write(template.render(mib_paths=mib_paths))
                 log.info('smi.conf generated to {}'.format(self.smi_conf.name))
 
-    def load_core_mibs(self):
-        """To forbid compilation of core MIBs"""
-        for mib_type in ('core', 'current'):
-            for root, dirs, files in os.walk('{}/pysnmp/{}'.format(self.mibs_root, mib_type)):
-                for filename in files:
-                    if filename.endswith('.py') and filename != '__init__.py':
-                        self.mibs[filename[:-3]] = {'allow_overwrite': False}
+    def load_existing_mibs(self):
+        """To forbid compilation of existing MIBs"""
+        mib_builder = builder.MibBuilder()
+        for mibSource in mib_builder.getMibSources():
+            for modName in mibSource.listdir():
+                self.mibs[modName] = {'allow_overwrite': False}
+        # for mib_type in ('core', 'current'):
+        #     for root, dirs, files in os.walk('{}/pysnmp/{}'.format(self.mib_source, mib_type)):
+        #         for filename in files:
+        #             if filename.endswith('.py') and filename != '__init__.py':
+        #                 self.mibs[filename[:-3]] = {'allow_overwrite': False}
 
     def check_pysnmp(self):
         mibBuilder = builder.MibBuilder()
-        mib_path = ['{}/pysnmp/{}'.format(self.mibs_root, mib_type) for mib_type in ('core', 'current', 'staging')]
-        mibBuilder.setMibPath(*tuple(mib_path))
+
+        # mib_path = ['{}/pysnmp/{}'.format(self.mib_source, mib_type) for mib_type in ('core', 'current', 'staging')]
+        # mibBuilder.setMibPath(*tuple(mib_path))
         try:
             mibBuilder.loadModules()
             mibBuilder.unloadModules()
@@ -99,6 +106,8 @@ class MIBCompiler(object):
         re_lang_match = re_lang.search(stdout)
         re_path_match = re_path.search(stdout)
         if not re_lang_match or not re_path_match:
+            log.warning('stdout:\n{}'.format(stdout))
+            log.warning('stderr:\n{}'.format(stderr))
             raise CompileError('version info failed, mib={}'.format(mib))
         self.mibs[mib]['lang'] = re_lang_match.groups()[0]
         self.mibs[mib]['path'] = re_path_match.groups()[0]
@@ -112,6 +121,8 @@ class MIBCompiler(object):
         returncode, stdout, stderr = exec_cmd("smilint -c {smi_conf} -l {severity} -s -r {mib}".format(
             smi_conf=self.smi_conf.name, severity=severity, mib=self.mibs[mib]['path']))
         if returncode:
+            log.warning('stdout:\n{}'.format(stdout))
+            log.warning('stderr:\n{}'.format(stderr))
             raise CompileError('{mib}: mib syntax invalid'.format(mib=mib))
         for line in stderr.split('\n'):
             re_dep_match = re.match("^.*? failed to locate MIB module `(.*?)'", line)
@@ -126,6 +137,8 @@ class MIBCompiler(object):
             "smidump -c {smi_conf} -l 3 -k -s -f smiv2 -o {filename} {mib}".format(
                 smi_conf=self.smi_conf.name, filename=filename, mib=self.mibs[mib]['path']))
         if returncode:
+            log.warning('stdout:\n{}'.format(stdout))
+            log.warning('stderr:\n{}'.format(stderr))
             raise CompileError('{mib}: convert to SMIv2 failed'.format(mib=mib))
         self.mibs[mib]['path'] = filename
 
@@ -136,17 +149,20 @@ class MIBCompiler(object):
             "smidump -c {smi_conf} -l 3 -k -s -f python -o {filename} {mib}".format(
                 smi_conf=self.smi_conf.name, filename=filename, mib=self.mibs[mib]['path']))
         if returncode:
+            log.warning('stdout:\n{}'.format(stdout))
+            log.warning('stderr:\n{}'.format(stderr))
             raise CompileError('{mib}: convert to python failed'.format(mib=mib))
 
     def convert_mib_to_pysnmp(self, mib):
-        staging_dir = os.path.join(self.mibs_root, 'pysnmp', 'staging')
-        os.path.isdir(staging_dir) or os.makedirs(staging_dir)
+        os.path.isdir(self.staging_directory) or os.makedirs(self.staging_directory)
         log.info('{mib}: converting to PySNMP format'.format(mib=mib))
         fn_in = os.path.join(self.tmp_dir, '{}.python'.format(mib))
-        fn_out = os.path.join(self.mibs_root, 'pysnmp', 'staging', '{}.py'.format(mib))
+        fn_out = os.path.join(self.staging_directory, '{}.py'.format(mib))
         returncode, stdout, stderr = exec_cmd("cat {} | libsmi2pysnmp > {}".format(
             fn_in, fn_out))
         if returncode:
+            log.warning('stdout:\n{}'.format(stdout))
+            log.warning('stderr:\n{}'.format(stderr))
             raise CompileError('{mib}: convert to pysnmp failed'.format(mib=mib))
 
     def check_imports(self, mib):
@@ -168,17 +184,17 @@ class MIBCompiler(object):
         return modules.keys()
 
     def commit(self):
-        for root, dirs, files in os.walk(os.path.join(self.mibs_root, 'pysnmp', 'staging')):
+        for root, dirs, files in os.walk(self.staging_directory):
             for filename in files:
                 if not filename.endswith('.py'):
                     continue
                 mib = filename[:-3]
                 fn_new = os.path.join(root, filename)
                 size_new = os.path.getsize(fn_new)
-                fn_old = '{}/pysnmp/current/{}'.format(self.mibs_root, filename)
+                fn_old = os.path.join(self.destination_directory, filename)
                 if os.path.isfile(fn_old):
                     size_old = os.path.getsize(fn_old)
-                    log.warn('MIB file exists in current folder name={name} size={size_old} new size={size_new}, allow_overwrite={allow_overwrite}'.format(
+                    log.warn('MIB file exists in destination folder name={name} size={size_old} new size={size_new}, allow_overwrite={allow_overwrite}'.format(
                         name=filename, size_old=size_old, size_new=size_new, allow_overwrite=self.mibs[mib]['allow_overwrite']))
                     if self.mibs[mib]['allow_overwrite']:
                         os.unlink(fn_old)
@@ -187,14 +203,12 @@ class MIBCompiler(object):
                 log.info('Exporting MIB file={}, size={}'.format(filename, size_new))
                 shutil.move(fn_new, fn_old)
         self.smi_conf and os.unlink(self.smi_conf.name)
+        shutil.rmtree(self.staging_directory)
 
 
 def exec_cmd(cmd):
     p = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     stdout, stderr = p.communicate()
-    if p.returncode:
-        log.exception('Command failed with exit code {code}, cmd={cmd}, stdout=\n{stdout}, std_err=\n{stderr}'.format(
-            code=p.returncode, cmd=cmd, stdout=stdout, stderr=stderr))
     return p.returncode, stdout, stderr
 
 
@@ -203,14 +217,24 @@ def main():
 
     parser = argparse.ArgumentParser()
     parser.add_argument("mib", help="MIB file to compile")
-    parser.add_argument("--revalidate", help="validate and commit changes", action="store_true")
-    parser.add_argument("--mibs_root", help="MIBs location")
+    parser.add_argument("--check", help="check pysnmp", action="store_true")
+    parser.add_argument("--mib-source", help="ASN.1 MIBs location")
+    parser.add_argument("--destination-directory", help="PySNMP MIBs directory",
+                        default=os.path.expanduser('~/.pysnmp-mib-compiler/mibs'))
+    parser.add_argument("--staging-directory", help="Staging directory",
+                        default=os.path.expanduser('~/.pysnmp-mib-compiler/staging'))
     args = parser.parse_args()
 
-    mib_compiler = MIBCompiler(args.mibs_root)
-    if args.revalidate:
+    os.environ['PYSNMP_MIB_DIRS'] = os.pathsep.join((args.destination_directory, args.staging_directory))
+
+    mib_compiler = MIBCompiler(
+        mib_source=args.mib_source,
+        destination_directory=args.destination_directory,
+        staging_directory=args.staging_directory,
+    )
+
+    if args.check:
         mib_compiler.check_pysnmp()
-        mib_compiler.commit()
     else:
         mib_compiler.process(args.mib)
 
