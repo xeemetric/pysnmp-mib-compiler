@@ -19,6 +19,7 @@ setup(
             'mib_compiler = pysnmp_mib_compiler.mib_compiler:main',
         ],
     },
+    include_package_data=True,
     platforms=['Any'],
     license='BSD',
     zip_safe=False,
